@@ -41,3 +41,21 @@ body {
     linear-gradient(90deg, #ebebeb 1px, transparent 1px);
   background-size: 40px 40px;
 }
+
+/* Leilões — utilitários premium */
+.leilao-gold {
+  color: #c9a227;
+}
+
+.leilao-gold-bg {
+  background-color: #c9a227;
+}
+
+@keyframes leilao-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.leilao-live-dot {
+  animation: leilao-pulse 1.5s ease-in-out infinite;
+}
