@@ -1,26 +1,43 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f5f6f7;
+  --foreground: #1a1a1a;
+  --agronex-green: #1b4332;
+  --agronex-green-dark: #0d2818;
+  --agronex-green-light: #2d6a4f;
+  --agronex-green-muted: #40916c;
+  --agronex-accent: #52b788;
+  --agronex-surface: #ffffff;
+  --agronex-border: #e5e7eb;
+  --agronex-muted: #6b7280;
+  --agronex-grid: #f0f0f0;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-agronex-green: var(--agronex-green);
+  --color-agronex-green-dark: var(--agronex-green-dark);
+  --color-agronex-green-light: var(--agronex-green-light);
+  --color-agronex-green-muted: var(--agronex-green-muted);
+  --color-agronex-accent: var(--agronex-accent);
+  --color-agronex-surface: var(--agronex-surface);
+  --color-agronex-border: var(--agronex-border);
+  --color-agronex-muted: var(--agronex-muted);
+  --font-sans: var(--font-inter);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+.grid-pattern {
+  background-color: #f5f6f7;
+  background-image:
+    linear-gradient(#ebebeb 1px, transparent 1px),
+    linear-gradient(90deg, #ebebeb 1px, transparent 1px);
+  background-size: 40px 40px;
 }

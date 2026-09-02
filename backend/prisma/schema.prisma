@@ -1,0 +1,726 @@
+// AGRONEX — Schema inicial PostgreSQL
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum RoleType {
+  PRODUCER
+  BUYER
+  DELIVERY_PARTNER
+  ADMIN
+}
+
+enum LotStatus {
+  DRAFT
+  PENDING_REVIEW
+  AVAILABLE
+  IN_AUCTION
+  SOLD
+  DELIVERED
+  CANCELLED
+}
+
+enum AuctionStatus {
+  SCHEDULED
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAYMENT_HELD
+  IN_LOGISTICS
+  IN_TRANSIT
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum PaymentProvider {
+  STRIPE
+  PAGARME
+  MANUAL
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum SplitRecipientType {
+  PRODUCER
+  PLATFORM
+  DELIVERY_PARTNER
+  INSURANCE
+  OTHER
+}
+
+enum SplitPaymentStatus {
+  PENDING
+  PROCESSING
+  TRANSFERRED
+  FAILED
+}
+
+enum AdvanceStatus {
+  REQUESTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  DISBURSED
+}
+
+enum RouteStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING
+  ASSIGNED
+  PICKUP_SCHEDULED
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+enum TrackingEventType {
+  LOCATION_UPDATE
+  PICKUP
+  CHECKPOINT
+  DELIVERY
+  INCIDENT
+  OTHER
+}
+
+enum DocumentType {
+  DAP
+  CAR
+  GTA
+  IDENTIFICATION
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum CertificateStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum UnitType {
+  KG
+  TON
+  SACK
+  LITER
+  UNIT
+}
+
+enum CadastralStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  AUCTION
+  BID
+  ORDER
+  PAYMENT
+  DELIVERY
+  DOCUMENT
+  SYSTEM
+  OTHER
+}
+
+// ─── Auth & Users ────────────────────────────────────────────────────────────
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        RoleType @unique
+  description String?
+  permissions Json?    @map("permissions")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  roleId       String     @map("role_id") @db.Uuid
+  status       UserStatus @default(PENDING)
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  role            Role             @relation(fields: [roleId], references: [id])
+  profile         Profile?
+  producer        Producer?
+  buyer           Buyer?
+  deliveryPartner DeliveryPartner?
+  documents       Document[]       @relation("DocumentOwner")
+  notifications   Notification[]
+  reputation      Reputation?
+  ratingsGiven    Rating[]         @relation("RatingEvaluator")
+  ratingsReceived Rating[]         @relation("RatingEvaluated")
+  auditLogs       AuditLog[]
+  refreshTokens   RefreshToken[]
+
+  @@index([roleId])
+  @@index([status])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model Profile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  fullName  String   @map("full_name")
+  phone     String?
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+// ─── Personas ────────────────────────────────────────────────────────────────
+
+model Producer {
+  id                   String          @id @default(uuid()) @db.Uuid
+  userId               String          @unique @map("user_id") @db.Uuid
+  legalName            String          @map("legal_name")
+  tradeName            String?         @map("trade_name")
+  document             String          @unique
+  phone                String
+  contactEmail         String          @map("contact_email")
+  address              String
+  city                 String
+  state                String
+  zipCode              String          @map("zip_code")
+  country              String          @default("BR")
+  propertyName         String?         @map("property_name")
+  propertySize         Decimal?        @map("property_size") @db.Decimal(12, 2)
+  propertyRegistration String?         @map("property_registration")
+  latitude             Decimal?        @db.Decimal(10, 7)
+  longitude            Decimal?        @db.Decimal(10, 7)
+  cadastralStatus      CadastralStatus @default(PENDING) @map("cadastral_status")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lots     Lot[]
+  orders   Order[]   @relation("OrderProducer")
+  advances Advance[]
+
+  @@index([cadastralStatus])
+  @@index([state, city])
+  @@map("producers")
+}
+
+model Buyer {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @map("user_id") @db.Uuid
+  companyName String   @map("company_name")
+  document    String   @unique
+  phone       String
+  contactEmail String  @map("contact_email")
+  address     String
+  city        String
+  state       String
+  zipCode     String   @map("zip_code")
+  country     String   @default("BR")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders          Order[]   @relation("OrderBuyer")
+  bids            Bid[]
+  auctionsWon     Auction[] @relation("AuctionWinner")
+
+  @@index([state, city])
+  @@map("buyers")
+}
+
+model DeliveryPartner {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  companyName  String   @map("company_name")
+  document     String   @unique
+  phone        String
+  contactEmail String   @map("contact_email")
+  licensePlate String?  @map("license_plate")
+  vehicleType  String?  @map("vehicle_type")
+  address      String
+  city         String
+  state        String
+  zipCode      String   @map("zip_code")
+  country      String   @default("BR")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries Delivery[]
+
+  @@index([active])
+  @@map("delivery_partners")
+}
+
+// ─── Products & Lots ─────────────────────────────────────────────────────────
+
+model Category {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String   @unique
+  description String?
+  parentId    String?  @map("parent_id") @db.Uuid
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@index([parentId])
+  @@index([active])
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(uuid()) @db.Uuid
+  categoryId  String   @map("category_id") @db.Uuid
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  category Category @relation(fields: [categoryId], references: [id])
+  lots     Lot[]
+
+  @@index([categoryId])
+  @@index([active])
+  @@map("products")
+}
+
+model Lot {
+  id               String    @id @default(uuid()) @db.Uuid
+  productId        String    @map("product_id") @db.Uuid
+  producerId       String    @map("producer_id") @db.Uuid
+  quantity         Decimal   @db.Decimal(18, 4)
+  unit             UnitType
+  harvestDate      DateTime? @map("harvest_date") @db.Date
+  minimumPrice     Decimal   @map("minimum_price") @db.Decimal(18, 2)
+  origin           String
+  latitude         Decimal?  @db.Decimal(10, 7)
+  longitude        Decimal?  @db.Decimal(10, 7)
+  availabilityDate DateTime? @map("availability_date") @db.Date
+  status           LotStatus @default(DRAFT)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  product      Product       @relation(fields: [productId], references: [id])
+  producer     Producer      @relation(fields: [producerId], references: [id])
+  auctions     Auction[]
+  orderItems   OrderItem[]
+  documents    Document[]
+  certificates Certificate[]
+
+  @@index([productId])
+  @@index([producerId])
+  @@index([status])
+  @@index([availabilityDate])
+  @@map("lots")
+}
+
+// ─── Auctions & Bids ─────────────────────────────────────────────────────────
+
+model Auction {
+  id               String        @id @default(uuid()) @db.Uuid
+  lotId            String        @map("lot_id") @db.Uuid
+  startAt          DateTime      @map("start_at")
+  endAt            DateTime      @map("end_at")
+  minimumPrice     Decimal       @map("minimum_price") @db.Decimal(18, 2)
+  currentPrice     Decimal       @default(0) @map("current_price") @db.Decimal(18, 2)
+  minimumIncrement Decimal       @map("minimum_increment") @db.Decimal(18, 2)
+  status           AuctionStatus @default(SCHEDULED)
+  winnerId         String?       @map("winner_id") @db.Uuid
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  lot    Lot     @relation(fields: [lotId], references: [id])
+  winner Buyer?  @relation("AuctionWinner", fields: [winnerId], references: [id])
+  bids   Bid[]
+  orders Order[]
+
+  @@index([lotId])
+  @@index([status])
+  @@index([startAt, endAt])
+  @@map("auctions")
+}
+
+model Bid {
+  id        String   @id @default(uuid()) @db.Uuid
+  auctionId String   @map("auction_id") @db.Uuid
+  bidderId  String   @map("bidder_id") @db.Uuid
+  amount    Decimal  @db.Decimal(18, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  auction Auction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  bidder  Buyer   @relation(fields: [bidderId], references: [id])
+
+  @@index([auctionId])
+  @@index([createdAt])
+  @@index([amount])
+  @@index([auctionId, createdAt(sort: Desc)])
+  @@map("bids")
+}
+
+// ─── Orders ──────────────────────────────────────────────────────────────────
+
+model Order {
+  id                   String      @id @default(uuid()) @db.Uuid
+  buyerId              String      @map("buyer_id") @db.Uuid
+  producerId           String      @map("producer_id") @db.Uuid
+  auctionId            String?     @map("auction_id") @db.Uuid
+  status               OrderStatus @default(PENDING_PAYMENT)
+  subtotal             Decimal     @db.Decimal(18, 2)
+  freight              Decimal     @default(0) @db.Decimal(18, 2)
+  insurance            Decimal     @default(0) @db.Decimal(18, 2)
+  total                Decimal     @db.Decimal(18, 2)
+  origin               String
+  destination          String
+  expectedDeliveryDate DateTime?   @map("expected_delivery_date") @db.Date
+  deliveryInstructions String?     @map("delivery_instructions")
+  createdAt            DateTime    @default(now()) @map("created_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
+
+  buyer    Buyer       @relation("OrderBuyer", fields: [buyerId], references: [id])
+  producer Producer    @relation("OrderProducer", fields: [producerId], references: [id])
+  auction  Auction?    @relation(fields: [auctionId], references: [id])
+  items    OrderItem[]
+  payments Payment[]
+  delivery Delivery?
+  ratings  Rating[]
+
+  @@index([buyerId])
+  @@index([producerId])
+  @@index([auctionId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid()) @db.Uuid
+  orderId   String  @map("order_id") @db.Uuid
+  lotId     String  @map("lot_id") @db.Uuid
+  quantity  Decimal @db.Decimal(18, 4)
+  unitPrice Decimal @map("unit_price") @db.Decimal(18, 2)
+  total     Decimal @db.Decimal(18, 2)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  lot   Lot   @relation(fields: [lotId], references: [id])
+
+  @@index([orderId])
+  @@index([lotId])
+  @@map("order_items")
+}
+
+// ─── Payments ────────────────────────────────────────────────────────────────
+
+model Payment {
+  id         String          @id @default(uuid()) @db.Uuid
+  orderId    String          @map("order_id") @db.Uuid
+  provider   PaymentProvider
+  externalId String?         @map("external_id")
+  amount     Decimal         @db.Decimal(18, 2)
+  status     PaymentStatus   @default(PENDING)
+  paidAt     DateTime?       @map("paid_at")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+
+  order        Order          @relation(fields: [orderId], references: [id])
+  splitPayments SplitPayment[]
+  advances     Advance[]
+
+  @@index([orderId])
+  @@index([status])
+  @@index([externalId])
+  @@map("payments")
+}
+
+model SplitPayment {
+  id            String             @id @default(uuid()) @db.Uuid
+  paymentId     String             @map("payment_id") @db.Uuid
+  recipientType SplitRecipientType @map("recipient_type")
+  recipientId   String             @map("recipient_id") @db.Uuid
+  percentage    Decimal            @db.Decimal(5, 2)
+  amount        Decimal            @db.Decimal(18, 2)
+  status        SplitPaymentStatus @default(PENDING)
+  transferredAt DateTime?          @map("transferred_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([recipientType, recipientId])
+  @@index([status])
+  @@map("split_payments")
+}
+
+model Advance {
+  id              String        @id @default(uuid()) @db.Uuid
+  producerId      String        @map("producer_id") @db.Uuid
+  paymentId       String?       @map("payment_id") @db.Uuid
+  requestedAmount Decimal       @map("requested_amount") @db.Decimal(18, 2)
+  status          AdvanceStatus @default(REQUESTED)
+  requestedAt     DateTime      @default(now()) @map("requested_at")
+  processedAt     DateTime?     @map("processed_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  producer Producer @relation(fields: [producerId], references: [id])
+  payment  Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([producerId])
+  @@index([status])
+  @@map("advances")
+}
+
+// ─── Logistics ───────────────────────────────────────────────────────────────
+
+model Route {
+  id                String      @id @default(uuid()) @db.Uuid
+  origin            String
+  destination       String
+  distance          Decimal     @db.Decimal(10, 2)
+  estimatedDuration Int         @map("estimated_duration")
+  status            RouteStatus @default(PLANNED)
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  deliveries Delivery[]
+
+  @@index([status])
+  @@map("routes")
+}
+
+model Delivery {
+  id                String         @id @default(uuid()) @db.Uuid
+  orderId           String         @unique @map("order_id") @db.Uuid
+  deliveryPartnerId String?        @map("delivery_partner_id") @db.Uuid
+  routeId           String?        @map("route_id") @db.Uuid
+  vehicle           String?
+  status            DeliveryStatus @default(PENDING)
+  pickupAt          DateTime?      @map("pickup_at")
+  deliveredAt       DateTime?      @map("delivered_at")
+  proofPhoto        String?        @map("proof_photo")
+  proofLatitude     Decimal?       @map("proof_latitude") @db.Decimal(10, 7)
+  proofLongitude    Decimal?       @map("proof_longitude") @db.Decimal(10, 7)
+  proofTimestamp    DateTime?      @map("proof_timestamp")
+  observations      String?
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  order           Order            @relation(fields: [orderId], references: [id])
+  deliveryPartner DeliveryPartner? @relation(fields: [deliveryPartnerId], references: [id])
+  route           Route?           @relation(fields: [routeId], references: [id])
+  trackingEvents  TrackingEvent[]
+
+  @@index([deliveryPartnerId])
+  @@index([routeId])
+  @@index([status])
+  @@map("deliveries")
+}
+
+model TrackingEvent {
+  id         String            @id @default(uuid()) @db.Uuid
+  deliveryId String            @map("delivery_id") @db.Uuid
+  latitude   Decimal           @db.Decimal(10, 7)
+  longitude  Decimal           @db.Decimal(10, 7)
+  timestamp  DateTime
+  eventType  TrackingEventType @map("event_type")
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+  @@index([timestamp])
+  @@index([deliveryId, timestamp(sort: Desc)])
+  @@map("tracking_events")
+}
+
+// ─── Documents & Certificates ────────────────────────────────────────────────
+
+model Document {
+  id              String         @id @default(uuid()) @db.Uuid
+  ownerId         String         @map("owner_id") @db.Uuid
+  lotId           String?        @map("lot_id") @db.Uuid
+  type            DocumentType
+  fileUrl         String         @map("file_url")
+  status          DocumentStatus @default(PENDING)
+  expiresAt       DateTime?      @map("expires_at")
+  rejectionReason String?        @map("rejection_reason")
+  validatedAt     DateTime?      @map("validated_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  owner User @relation("DocumentOwner", fields: [ownerId], references: [id])
+  lot   Lot? @relation(fields: [lotId], references: [id])
+
+  @@index([ownerId])
+  @@index([lotId])
+  @@index([type])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("documents")
+}
+
+model Certificate {
+  id              String            @id @default(uuid()) @db.Uuid
+  lotId           String            @map("lot_id") @db.Uuid
+  publicCode      String            @unique @map("public_code")
+  qrCode          String            @map("qr_code")
+  status          CertificateStatus @default(ACTIVE)
+  harvestDate     DateTime?         @map("harvest_date") @db.Date
+  origin          String
+  certifications  Json?             @map("certifications")
+  integrityHash   String?           @map("integrity_hash")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  lot Lot @relation(fields: [lotId], references: [id])
+
+  @@index([lotId])
+  @@index([status])
+  @@map("certificates")
+}
+
+// ─── Reputation ──────────────────────────────────────────────────────────────
+
+model Reputation {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  score        Decimal  @default(0) @db.Decimal(3, 2)
+  totalRatings Int      @default(0) @map("total_ratings")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reputations")
+}
+
+model Rating {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String   @map("order_id") @db.Uuid
+  evaluatorId String   @map("evaluator_id") @db.Uuid
+  evaluatedId String   @map("evaluated_id") @db.Uuid
+  score       Int
+  comment     String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  order     Order @relation(fields: [orderId], references: [id])
+  evaluator User  @relation("RatingEvaluator", fields: [evaluatorId], references: [id])
+  evaluated User  @relation("RatingEvaluated", fields: [evaluatedId], references: [id])
+
+  @@unique([orderId, evaluatorId, evaluatedId])
+  @@index([evaluatedId])
+  @@index([orderId])
+  @@map("ratings")
+}
+
+// ─── Notifications & Audit ───────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  message   String
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, readAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  action    String
+  entity    String
+  entityId  String   @map("entity_id") @db.Uuid
+  metadata  Json?
+  ip        String?
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
